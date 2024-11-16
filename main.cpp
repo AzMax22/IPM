@@ -1,55 +1,78 @@
 #include <iostream>
 #include <filesystem>
-#include <vector>
+#include <string>
 
+#include <Eigen/SparseCore>
 #include "CoinMpsIO.hpp"
 
-template<typename T>
-void print_carray(T * arr, int len, std::string name){
-     std::cout << name << " = [";
+using std::cout, std::endl;
 
-    for(int i=0; i < len; i++){
-        std::cout << arr[i] << " ";
+typedef Eigen::SparseMatrix<double> SpMat;
+using Eigen::VectorXd;
+
+/**
+ * @brief Функция инициализирует данные задачи линейного программирования`eg_A`,`eg_b`,`eg_c`. 
+ *     Данные считывааються из файла *.mps который должен располагаться по пути `filepath`
+ * 
+ * @param filepath путь к файлу *.mps
+ * @param eg_A разреженная не иниц. матрица А
+ * @param eg_b плотный не иниц. вектор b
+ * @param eg_c плотный не иниц. вектор с
+ * @return Код завершения
+ */
+int initLpProblem(std::string& filepath, SpMat& eg_A, VectorXd& eg_b, VectorXd& eg_c){
+    // init reader 
+    CoinMpsIO m;
+
+    //read data
+    int numErr = m.readMps(filepath.c_str(), "mps");
+    
+    if(numErr){
+        //std::cout << "Error read mps. numErr = " << numErr << std::endl;
+        return numErr;
     }
 
-    std::cout << "]" << std::endl;
+    // get b and c
+    int len_c = m.getNumCols();
+    int len_b = m.getNumRows();
+
+    const double * ptr_c = m.getObjCoefficients();
+    const double * ptr_b = m.getRightHandSide();
+
+    eg_c = Eigen::Map<const VectorXd>(ptr_c, len_c); // here COPY data Map->VectorXd
+    eg_b = Eigen::Map<const VectorXd>(ptr_b, len_b); // here COPY data Map->VectorXd
+
+
+    // get A
+    const CoinPackedMatrix * A = m.getMatrixByCol();
+
+    int nnz = m.getNumElements();
+    const double* ptr_val = A->getElements(); 
+    const int * ptr_indices = A->getIndices();
+    const int * ptr_starts = A->getVectorStarts();
+    int len_starts = A->getMajorDim() + 1;
+
+    eg_A = Eigen::Map<const SpMat>(A->getNumRows(), A->getNumCols(), // here COPY data Map->SpMat
+                             nnz, ptr_starts, ptr_indices, ptr_val);
+
+    return 0;
 }
 
 
 int main(int, char**){
-    // init reader 
-    CoinMpsIO m;
-
-    std::string curr_dir = std::filesystem::current_path();
-    std::string fn = curr_dir+"/test.mps";
-    int numErr = m.readMps(fn.c_str(),"mps");
     
-    if(numErr){
-        std::cout << "Error read mps. numErr = " << numErr << std::endl;
+    std::string curr_dir = std::filesystem::current_path();
+    std::string fp = curr_dir+"/test.mps";
+    
+    SpMat A;
+    VectorXd b, c;
+
+    int err = initLpProblem(fp, A, b,c);
+
+    if(err){
+        std::cout << "Error when read mps. Code error = " << err << std::endl;
         exit(0);
     }
 
-    // get data
-    int len_c = m.getNumCols();
-    int len_b = m.getNumRows();
-    int len_el_A = m.getNumElements();
-
-    const double * c = m.getObjCoefficients();
-    const double * b = m.getRightHandSide();
-    const CoinPackedMatrix * A = m.getMatrixByCol();
-
-    const double* el_A = A->getElements(); // stored by columns
-
-    //std::vector<double> vec_c(c, c + len_c);
-
-    print_carray(c, len_c, "c");
-    print_carray(b, len_b, "b");
-    print_carray(el_A, len_el_A, "el_A");
-    print_carray(A->getIndices(), len_el_A, "ind");
-    print_carray(A->getVectorStarts(), A->getMajorDim() + 1, "vstarts");
-
-    //std::cout << "c = " << A->getIndices() << std::endl;
-    //std::cout << "len_b = " << len_b << std::endl;
-
-    //std::cout << "nr = " <<  m.getNumElements() << std::endl;
+    cout << A << endl;
 }
