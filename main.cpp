@@ -2,13 +2,16 @@
 #include <filesystem>
 #include <string>
 
-#include <Eigen/SparseCore>
 #include "CoinMpsIO.hpp"
+#include<Eigen/SparseLU>
+#include <Eigen/SparseCore>
 
-using std::cout, std::endl;
+#include "IPM.hpp"
 
-typedef Eigen::SparseMatrix<double> SpMat;
-using Eigen::VectorXd;
+
+using SpMat = Eigen::SparseMatrix<double> ;
+using Vec = Eigen::VectorXd;
+
 
 /**
  * @brief Функция инициализирует данные задачи линейного программирования`eg_A`,`eg_b`,`eg_c`. 
@@ -20,7 +23,7 @@ using Eigen::VectorXd;
  * @param eg_c плотный не иниц. вектор с
  * @return Код завершения
  */
-int initLpProblem(std::string& filepath, SpMat& eg_A, VectorXd& eg_b, VectorXd& eg_c){
+int initLpProblem(std::string& filepath, SpMat& eg_A, Vec& eg_b, Vec& eg_c){
     // init reader 
     CoinMpsIO m;
 
@@ -39,8 +42,8 @@ int initLpProblem(std::string& filepath, SpMat& eg_A, VectorXd& eg_b, VectorXd& 
     const double * ptr_c = m.getObjCoefficients();
     const double * ptr_b = m.getRightHandSide();
 
-    eg_c = Eigen::Map<const VectorXd>(ptr_c, len_c); // here COPY data Map->VectorXd
-    eg_b = Eigen::Map<const VectorXd>(ptr_b, len_b); // here COPY data Map->VectorXd
+    eg_c = Eigen::Map<const Vec>(ptr_c, len_c); // here COPY data Map->VectorXd
+    eg_b = Eigen::Map<const Vec>(ptr_b, len_b); // here COPY data Map->VectorXd
 
 
     // get A
@@ -60,19 +63,32 @@ int initLpProblem(std::string& filepath, SpMat& eg_A, VectorXd& eg_b, VectorXd& 
 
 
 int main(int, char**){
-    
+    namespace Eg = Eigen;
+    using std::cout, std::endl;
+
+    //read data Lp
+    SpMat A;
+    Vec b, c;
+
     std::string curr_dir = std::filesystem::current_path();
     std::string fp = curr_dir+"/test.mps";
-    
-    SpMat A;
-    VectorXd b, c;
 
-    int err = initLpProblem(fp, A, b,c);
+    int err_read = initLpProblem(fp, A, b, c);
 
-    if(err){
-        std::cout << "Error when read mps. Code error = " << err << std::endl;
+    if(err_read){
+        cout << "Error read mps file. Code error = " << err_read << endl;
         exit(0);
     }
 
-    cout << A << endl;
+    //solve Lp problem
+    Vec ans;
+    ErCode errIPM;
+    TermCrit crit{.countMax=1, .sq_eps=0.001};
+    IPM ipm_solver(A, b, c, crit);
+
+    ans = ipm_solver.solve(errIPM);
+ 
+    cout << ans << endl ;
+
+    return 0;
 }
