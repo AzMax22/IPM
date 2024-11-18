@@ -82,7 +82,7 @@ int main(int, char**){
     //solve Lp problem
     Vec ans;
     ErCode errIPM;
-    TermCrit crit{.countMax=1, .sq_eps=0.1, .delt=0.1};
+    TermCrit crit{.countMax=10, .sq_eps=0.1, .sq_delt=0.1};
     IPM ipm_solver(A, b, c, crit);
 
     ans = ipm_solver.solve(errIPM);

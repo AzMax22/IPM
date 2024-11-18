@@ -23,7 +23,7 @@ enum class ErCode{
 struct TermCrit {   // Terminate criteria
     int countMax;   
     double sq_eps; // eps^2
-    double delt;
+    double sq_delt;
 };
 
 
@@ -31,16 +31,17 @@ class IPM
 {   
     using SpMat = Eigen::SparseMatrix<double> ;
     using Vec = Eigen::VectorXd;
-    using Solver = Eigen::SimplicialLLT<SpMat, Eigen::Lower>;
+    using Solver = Eigen::SimplicialLDLT<SpMat, Eigen::Lower>;
 
     SpMat& m_A;
     Vec& m_b, m_c;
 
     TermCrit m_crit;
     Vec m_x;  // неизвестный вектор
-    Vec m_r; // невязка
+    Vec m_r; // невязка          //use for crit
+    Vec m_g;  // g = c - A.T*u   //use for crit
     double m_sqnorm_r; //квадрат нормы невязки 
-    int m_countfor = 0;
+    int m_countfor = 0; //use for crit
 
     std::vector<double> m_vec_lambds; //вектор нужен для вычисления lambda
 
@@ -50,15 +51,15 @@ class IPM
         //init gamma and random x 
         std::random_device rd;
         std::mt19937 gen(42);  // rd() // here you could set the seed, but std::random_device already does that
-        std::uniform_real_distribution<double> dis(0., 1.0); //TODO set range
+        std::uniform_real_distribution<double> dis(0., 10.0); //TODO set range
 
-        m_x = Vec::NullaryExpr(len, [&](){return dis(gen);}); //return dis(gen);
+        m_x = Vec::NullaryExpr(len, [&](){return 1;}); //return dis(gen);
     }
 
     bool _checkTermCriteria(){
 
-        return (m_countfor >= m_crit.countMax ); 
-                //|| m_sqnorm_r < m_crit.sq_eps);
+        return m_countfor >= m_crit.countMax 
+               || (m_sqnorm_r < m_crit.sq_eps && m_g.squaredNorm() < m_crit.sq_delt);
     }
 
     
@@ -126,14 +127,17 @@ public:
         _initRandX(m_A.cols());
         m_r = m_b - m_A * m_x;
         m_sqnorm_r = m_r.squaredNorm();
-        std::cout << "x = " << m_x<< std::endl; // DEBUG
+        //std::cout << "x = " << m_x<< std::endl; // DEBUG
         std::cout << "Невязка = " << m_sqnorm_r << std::endl; // DEBUG
+        std::cout << "-------------------------------" << m_countfor <<
+            "-------------------------------" << std::endl; // DEBUG
 
         int n = m_x.size();
         double lamb;
         Vec d(n), q(n), u(n), s(n);
         SpMat T(n,n);
         err = ErCode::NO_ERROR; 
+        m_g = Vec::Zero(n);
 
         while (!_checkTermCriteria()){
             d = m_x.cwiseProduct(m_x); 
@@ -148,10 +152,12 @@ public:
             err = _solveLinSys(T, q, u);
 
             if (err!=ErCode::NO_ERROR){
+                std::cout << Eigen::MatrixXd(T) << std::endl; //
                 return m_x;
             }
 
-            s = -1 * d.asDiagonal() * (m_c - m_A.transpose() * u); 
+            m_g = m_c - m_A.transpose() * u;
+            s = -1 * d.asDiagonal() * m_g; //m_g need for termCrit
 
             lamb = _calculateLambda(s, m_x, err);
 
@@ -163,8 +169,10 @@ public:
             m_r = (1 - lamb) * m_r;
             m_sqnorm_r = m_r.squaredNorm();
             std::cout << "Невязка = " << m_sqnorm_r << std::endl; // DEBUG
-            //std::cout << "loop count: " << m_countfor << std::endl; //Eigen::MatrixXd(a)
-            //std::cout << s << std::endl; //Eigen::MatrixXd(a)
+            std::cout << "g.norm = " << m_g.squaredNorm() << std::endl; // DEBUG
+            std::cout << "cT*x = " << m_c.transpose() * m_x << std::endl; // DEBUG
+            std::cout << "-------------------------------" << m_countfor+1 <<
+            "-------------------------------" << std::endl; // DEBUG
 
             m_countfor += 1;
         }
