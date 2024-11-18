@@ -3,7 +3,6 @@
 #include <string>
 
 #include "CoinMpsIO.hpp"
-#include<Eigen/SparseLU>
 #include <Eigen/SparseCore>
 
 #include "IPM.hpp"
@@ -83,12 +82,14 @@ int main(int, char**){
     //solve Lp problem
     Vec ans;
     ErCode errIPM;
-    TermCrit crit{.countMax=1, .sq_eps=0.001};
+    TermCrit crit{.countMax=1, .sq_eps=0.1, .delt=0.1};
     IPM ipm_solver(A, b, c, crit);
 
     ans = ipm_solver.solve(errIPM);
  
-    cout << ans << endl ;
+    cout << "ErCode = " << static_cast<std::underlying_type<ErCode>::type>(errIPM) << endl ;
+    
+    cout << "ans=" << ans << endl ;
 
     return 0;
 }
