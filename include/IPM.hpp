@@ -8,16 +8,17 @@
 
 #include <Eigen/SparseCore>
 #include<Eigen/SparseCholesky>
+#include<Eigen/SparseLU>
 
-
-const double GAMMA = 2./3.;
+const double GAMMA = 0.3;
 
 
 enum class ErCode{
     NO_ERROR,
     FACTARIZATION_ER,
     SOLVE_LIN_SYS_ER,
-    SPECIAL_SITUATION
+    SPECIAL_SITUATION,
+    FACTARIZATION_LU
 };
 
 struct TermCrit {   // Terminate criteria
@@ -73,7 +74,18 @@ class IPM
         // Compute the numerical factorization 
         m_solver.factorize(A); 
         if(m_solver.info()!=Eigen::Success) {
-            return ErCode::FACTARIZATION_ER;
+            //zero pivot
+            // so use LU
+            Eigen::SparseLU<SpMat> solverLU;
+            solverLU.compute(A);
+            if(solverLU.info()!=Eigen::Success) {
+                return ErCode::FACTARIZATION_LU;
+            }
+
+            solverLU.solve(b);
+            out = m_solver.solve(b);
+
+            return  ErCode::NO_ERROR;
         }
 
         out = m_solver.solve(b);
@@ -144,7 +156,7 @@ public:
 
             T = m_A * d.asDiagonal(); 
             q = m_r + T * m_c;
-            T = T * m_A.transpose(); //does a lot of unnecessary calculations TODO
+            T = (T * m_A.transpose()).pruned(); //does a lot of unnecessary calculations TODO
 
             //T.triangularView<Eigen::Lower>(); = T * m_A.transpose() //dont work TODO
             //std::cout << m_x << std::endl;
@@ -171,6 +183,8 @@ public:
             std::cout << "Невязка = " << m_sqnorm_r << std::endl; // DEBUG
             std::cout << "g.norm = " << m_g.squaredNorm() << std::endl; // DEBUG
             std::cout << "cT*x = " << m_c.transpose() * m_x << std::endl; // DEBUG
+            std::cout << "bT*u = " << m_b.transpose() * u << std::endl; // DEBUG
+            std::cout << "lambda = " << lamb << std::endl; // DEBUG
             std::cout << "-------------------------------" << m_countfor+1 <<
             "-------------------------------" << std::endl; // DEBUG
 
